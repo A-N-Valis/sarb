@@ -1,35 +1,24 @@
 mod data;
 mod math;
+mod pair;
 
-use crate::{
-    data::PriceWindow, 
-    math::{calculate_beta, calculate_half_life, calculate_spread}
-};
+use crate::pair::TradingPair;
 
 fn main() {
-    let mut window = PriceWindow::new(5);
-    let mut spread_vec = Vec::new();
-    let mut slice_vec = Vec::new();
-    let mut delta_buf = Vec::new();
+    let mut trading_pair = TradingPair::new(10, 100.0);
 
-    for i in 1..=7 {
-        window.push(i as f64);
+    let mut vec_x = Vec::with_capacity(10);
+    let mut vec_y = Vec::with_capacity(10);
+    let mut spread_vec = Vec::with_capacity(10);
+    let mut delta_buf = Vec::with_capacity(10);
+
+    for i in 1..=15 {
+        let price_x = 100.0 + i as f64 * 0.5;
+        let price_y = 200.0 + i as f64 * 1.1;
+        trading_pair.add_prices(price_x, price_y, &mut vec_x, &mut vec_y, &mut spread_vec, &mut delta_buf);
     }
 
-    window.fill_slice(&mut slice_vec);
-
-    println!("is_ready: {}", window.is_ready());
-    println!("to_vec: {:?}", slice_vec);
-
-    let x = vec![100.0, 101.5, 102.0, 103.5, 104.0];
-    let y = vec![200.5, 203.2, 204.1, 207.3, 208.0];
-
-    let beta = calculate_beta(&x, &y);
-    calculate_spread(&x, &y, beta, &mut spread_vec);
-
-    println!("Beta: {:.3}", beta);
-    println!("Spread: {:?}", spread_vec);
-
-    let half_life = calculate_half_life(&spread_vec, &mut delta_buf);
-    println!("Half Life: {}", half_life);
+    println!("PairState: {:?}", trading_pair.state);
+    println!("Beta: {:.4}", trading_pair.current_beta);
+    println!("Half Life: {:.4}", trading_pair.current_half_life);
 }
