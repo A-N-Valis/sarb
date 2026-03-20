@@ -25,7 +25,10 @@ impl PriceWindow {
         self.buffer.len() == self.capacity
     }
 
-    pub fn to_vec(&self) -> Vec<f64> {
-        self.buffer.iter().copied().collect()
+    pub fn fill_slice(&self, out: &mut Vec<f64>) {
+        out.clear();
+        let (front, back) = self.buffer.as_slices();
+        out.extend_from_slice(front);
+        out.extend_from_slice(back);
     }
 }
