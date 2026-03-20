@@ -3,13 +3,14 @@ mod math;
 
 use crate::{
     data::PriceWindow, 
-    math::{calculate_beta, calculate_spread}
+    math::{calculate_beta, calculate_half_life, calculate_spread}
 };
 
 fn main() {
     let mut window = PriceWindow::new(5);
     let mut spread_vec = Vec::new();
     let mut slice_vec = Vec::new();
+    let mut delta_buf = Vec::new();
 
     for i in 1..=7 {
         window.push(i as f64);
@@ -28,4 +29,7 @@ fn main() {
 
     println!("Beta: {:.3}", beta);
     println!("Spread: {:?}", spread_vec);
+
+    let half_life = calculate_half_life(&spread_vec, &mut delta_buf);
+    println!("Half Life: {}", half_life);
 }

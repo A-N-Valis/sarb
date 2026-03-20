@@ -1,3 +1,5 @@
+use std::f64::consts::LN_2;
+
 fn mean(data: &[f64]) -> f64 {
     if data.is_empty() { return 0.0; }
 
@@ -25,4 +27,22 @@ pub fn calculate_spread(x: &[f64], y: &[f64], beta: f64, out: &mut Vec<f64>) {
 
     out.clear();
     out.extend(x.iter().zip(y.iter()).map(|(x, y)| y - beta * x));
+}
+
+pub fn calculate_half_life(spread: &[f64], delta_buf: &mut Vec<f64>) -> f64 {
+    let n = spread.len();
+    assert!(n >= 2, "spread must have atleast two elements");
+
+    delta_buf.clear();
+    delta_buf.extend(spread.windows(2).map(|w| w[1] - w[0]));
+
+    let lagged_spread = &spread[..n-1];
+
+    let gamma = calculate_beta(lagged_spread, delta_buf);
+
+    if gamma >= 0.0 {
+        return f64::INFINITY;
+    }
+
+    -LN_2 / gamma
 }
