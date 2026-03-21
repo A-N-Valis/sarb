@@ -5,8 +5,6 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use serde::Deserialize;
 
-const WSS_URL: &str = "wss://stream.binance.com:9443/stream?streams=solusdt@aggTrade/ethusdt@aggTrade";
-
 #[derive(Debug)]
 pub struct Tick {
     pub symbol: String,
@@ -26,8 +24,8 @@ struct CombinedMsg {
     data: AggTradeData
 }
 
-async fn connect_and_stream(tx: &mpsc::Sender<Tick>) -> anyhow::Result<()> {
-    let (ws_stream, _) = connect_async(WSS_URL).await?;
+async fn connect_and_stream(url: &str, tx: &mpsc::Sender<Tick>) -> anyhow::Result<()> {
+    let (ws_stream, _) = connect_async(url).await?;
     let (mut write, mut read) = ws_stream.split();
 
     while let Some(msg) = read.next().await {
@@ -63,9 +61,17 @@ async fn connect_and_stream(tx: &mpsc::Sender<Tick>) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn spawn_market_stream(tx: mpsc::Sender<Tick>) {
+pub async fn spawn_market_stream(symbols: Vec<String>, tx: mpsc::Sender<Tick>) {
+    let streams = symbols
+        .iter()
+        .map(|s| format!("{}@aggTrade", s.to_lowercase()))
+        .collect::<Vec<String>>()
+        .join("/");
+
+    let url = format!("wss://stream.binance.com:9443/stream?streams={}", streams);
+
     loop {
-        match connect_and_stream(&tx).await {
+        match connect_and_stream(&url, &tx).await {
             Ok(_) => eprintln!("[exchange] stream closed reconnecting in 5s"),
             Err(e) => eprintln!("[exchange] Error: {} reconnecting in 5s", e),
         }

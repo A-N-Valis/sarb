@@ -3,13 +3,15 @@ mod math;
 mod pair;
 mod exchange;
 mod storage;
+mod universe;
+
+use std::collections::HashMap;
 
 use tokio::{sync::mpsc, time};
 use crate::{
     exchange::Tick, 
     math::calculate_z_score, 
-    pair::TradingPair, 
-    storage::{load_history, load_position}
+    universe::{build_symbol_list, build_universe}
 };
 
 // 5 - dev, 2880 - prod
@@ -19,29 +21,16 @@ const CAPACITY: usize = 5;
 async fn main() {
     let (tx, mut rx) = mpsc::channel::<Tick>(512);
 
-    tokio::spawn(exchange::spawn_market_stream(tx));
+    tokio::spawn(exchange::spawn_market_stream(build_symbol_list(),tx));
 
-    let mut pair = TradingPair::new(CAPACITY, 360.0, 2.0, 0.5);
+    let mut uni = build_universe(CAPACITY);
+
+    let mut live_prices: HashMap<String, f64> = HashMap::new();
     
     let mut vec_x = Vec::with_capacity(CAPACITY);
     let mut vec_y = Vec::with_capacity(CAPACITY);
     let mut spread_vec = Vec::with_capacity(CAPACITY);
     let mut delta_buf = Vec::with_capacity(CAPACITY);
-
-    let (hist_x, hist_y) = load_history(CAPACITY);
-
-    for (x, y) in hist_x.iter().zip(hist_y.iter()) {
-        pair.add_prices(*x, *y, &mut vec_x, &mut vec_y, &mut spread_vec, &mut delta_buf);
-    }
-
-    if !hist_x.is_empty() {
-        println!("[boot] Window restored: {}/{}", pair.window_x.len(), CAPACITY);
-    }
-
-    pair.active_position = load_position();
-
-    let mut latest_x: Option<f64> = None;
-    let mut latest_y: Option<f64> = None;
 
     let mut ticker = time::interval(time::Duration::from_secs(60));
     ticker.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
@@ -49,42 +38,65 @@ async fn main() {
     loop {
         tokio::select! {
             Some(tick) = rx.recv() => {
-                match tick.symbol.as_str() {
-                    "SOLUSDT" => latest_x = Some(tick.price),
-                    "ETHUSDT" => latest_y = Some(tick.price),
-                    _ => {}
-                }
+                live_prices.insert(tick.symbol, tick.price);
             }
 
             _ = ticker.tick() => {
-                let (Some(x), Some(y)) = (latest_x, latest_y) else {
-                    eprintln!("[metronome] skipping missing price data (sol={:?} eth={:?})", latest_x, latest_y);
-                    continue;
-                };
+                let pair_keys: Vec<String> = uni.keys().cloned().collect();
 
-                storage::save_epoch(x, y);
+                for pair_key in &pair_keys {
+                    spread_vec.clear();
+                    vec_x.clear();
+                    vec_y.clear();
+                    delta_buf.clear();
 
-                pair.add_prices(x, y, &mut vec_x, &mut vec_y, &mut spread_vec, &mut delta_buf);
+                    let (base_x, base_y) = match universe::get_assets(pair_key) {
+                        Some(assets) => assets,
+                        None => {
+                            eprintln!("[engine] unknown pair key: {}", pair_key);
+                            continue;
+                        }
+                    };
 
-                if spread_vec.is_empty() {
-                    eprintln!("Accumalating ({}/{})", pair.window_x.len(), CAPACITY);
-                    continue;
-                }
+                    let sym_x = format!("{}USDT", base_x);
+                    let sym_y = format!("{}USDT", base_y);
 
-                let z = calculate_z_score(&spread_vec);
-                let signal = pair.generate_signal(z);
+                    let (&x, &y) = match (live_prices.get(&sym_x), live_prices.get(&sym_y)) {
+                        (Some(x), Some(y)) => (x, y),
+                        _ => continue
+                    };
 
-                println!(
-                    "[engine] State: {:?} | Beta: {:.4} | Half Life: {:.2}min | Z: {:+.4} | Signal: {:?}",
-                    pair.state, pair.current_beta, pair.current_half_life, z, signal
-                );
+                    let pair = match uni.get_mut(pair_key) {
+                        Some(p) => p,
+                        None => continue
+                    };
 
-                let had_position = pair.active_position.is_some();
-                pair.process_signal(signal, x,y);
-                let has_position = pair.active_position.is_some();
+                    pair.add_prices(x, y, &mut vec_x, &mut vec_y, &mut spread_vec, &mut delta_buf);
 
-                if had_position != has_position {
-                    storage::save_position(&pair.active_position);
+                    if spread_vec.is_empty() {
+                        eprintln!(
+                            "[{}] Accumulating ({}/{})",
+                            pair_key, pair.window_x.len(), CAPACITY
+                        );
+                        continue;
+                    }
+
+                    let z = calculate_z_score(&spread_vec);
+                    let signal = pair.generate_signal(z);
+
+                    println!(
+                        "[{}] State: {:?} | Beta: {:.3} | Half-Life: {:.3}min | Z: {:+.4} | Signal: {:?}",
+                        pair_key, pair.state, pair.current_beta,
+                        pair.current_half_life, z, signal
+                    );
+
+                    let had_position = pair.active_position.is_some();
+                    pair.process_signal(signal, x, y);
+                    let has_position = pair.active_position.is_some();
+
+                    if had_position != has_position {
+                        storage::save_position(&pair.active_position);
+                    }
                 }
             }
         }
