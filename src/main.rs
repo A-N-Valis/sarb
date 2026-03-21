@@ -2,9 +2,15 @@ mod data;
 mod math;
 mod pair;
 mod exchange;
+mod storage;
 
 use tokio::{sync::mpsc, time};
-use crate::{exchange::Tick, pair::TradingPair, math::calculate_z_score};
+use crate::{
+    exchange::Tick, 
+    math::calculate_z_score, 
+    pair::TradingPair, 
+    storage::{load_history, load_position}
+};
 
 // 5 - dev, 2880 - prod
 const CAPACITY: usize = 5;
@@ -21,6 +27,18 @@ async fn main() {
     let mut vec_y = Vec::with_capacity(CAPACITY);
     let mut spread_vec = Vec::with_capacity(CAPACITY);
     let mut delta_buf = Vec::with_capacity(CAPACITY);
+
+    let (hist_x, hist_y) = load_history(CAPACITY);
+
+    for (x, y) in hist_x.iter().zip(hist_y.iter()) {
+        pair.add_prices(*x, *y, &mut vec_x, &mut vec_y, &mut spread_vec, &mut delta_buf);
+    }
+
+    if !hist_x.is_empty() {
+        println!("[boot] Window restored: {}/{}", pair.window_x.len(), CAPACITY);
+    }
+
+    pair.active_position = load_position();
 
     let mut latest_x: Option<f64> = None;
     let mut latest_y: Option<f64> = None;
@@ -44,6 +62,8 @@ async fn main() {
                     continue;
                 };
 
+                storage::save_epoch(x, y);
+
                 pair.add_prices(x, y, &mut vec_x, &mut vec_y, &mut spread_vec, &mut delta_buf);
 
                 if spread_vec.is_empty() {
@@ -59,7 +79,13 @@ async fn main() {
                     pair.state, pair.current_beta, pair.current_half_life, z, signal
                 );
 
+                let had_position = pair.active_position.is_some();
                 pair.process_signal(signal, x,y);
+                let has_position = pair.active_position.is_some();
+
+                if had_position != has_position {
+                    storage::save_position(&pair.active_position);
+                }
             }
         }
     }

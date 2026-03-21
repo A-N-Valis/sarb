@@ -2,6 +2,7 @@ use crate::{
     data::PriceWindow, 
     math::{calculate_beta, calculate_half_life, calculate_spread}
 };
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug)]
 pub enum PairState {
@@ -19,6 +20,7 @@ pub enum TradeSignal {
     Exit
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Position {
     pub is_short_spread: bool,
     pub entry_price_x: f64,
