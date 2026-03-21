@@ -8,7 +8,7 @@ use serde::Deserialize;
 const WSS_URL: &str = "wss://stream.binance.com:9443/stream?streams=solusdt@aggTrade/ethusdt@aggTrade";
 
 #[derive(Debug)]
-pub struct PriceUpdate {
+pub struct Tick {
     pub symbol: String,
     pub price: f64,
 }
@@ -26,7 +26,7 @@ struct CombinedMsg {
     data: AggTradeData
 }
 
-async fn connect_and_stream(tx: &mpsc::Sender<PriceUpdate>) -> anyhow::Result<()> {
+async fn connect_and_stream(tx: &mpsc::Sender<Tick>) -> anyhow::Result<()> {
     let (ws_stream, _) = connect_async(WSS_URL).await?;
     let (mut write, mut read) = ws_stream.split();
 
@@ -35,7 +35,7 @@ async fn connect_and_stream(tx: &mpsc::Sender<PriceUpdate>) -> anyhow::Result<()
             Message::Text(text) => {
                 if let Ok(parsed) = serde_json::from_str::<CombinedMsg>(&text) {
                     if let Ok(price) = parsed.data.price.parse::<f64>() {
-                        let update = PriceUpdate {
+                        let update = Tick {
                             symbol: parsed.data.symbol,
                             price
                         };
@@ -63,7 +63,7 @@ async fn connect_and_stream(tx: &mpsc::Sender<PriceUpdate>) -> anyhow::Result<()
     Ok(())
 }
 
-pub async fn spawn_market_stream(tx: mpsc::Sender<PriceUpdate>) {
+pub async fn spawn_market_stream(tx: mpsc::Sender<Tick>) {
     loop {
         match connect_and_stream(&tx).await {
             Ok(_) => eprintln!("[exchange] stream closed reconnecting in 5s"),

@@ -31,4 +31,8 @@ impl PriceWindow {
         out.extend_from_slice(front);
         out.extend_from_slice(back);
     }
+
+    pub fn len(&self) -> usize {
+        self.buffer.len()
+    }
 }
