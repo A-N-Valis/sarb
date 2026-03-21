@@ -46,3 +46,16 @@ pub fn calculate_half_life(spread: &[f64], delta_buf: &mut Vec<f64>) -> f64 {
 
     -LN_2 / gamma
 }
+
+pub fn calculate_z_score(spread: &[f64]) -> f64 {
+    let spread_mean = mean(spread);
+    let variance = spread.iter().map(|x| (x - spread_mean).powi(2))
+        .sum::<f64>() / spread.len() as f64;
+    let sigma = variance.sqrt();
+
+    if sigma == 0.0 { return 0.0; }
+
+    let s_curr = spread[spread.len() - 1];
+
+    (s_curr - spread_mean) / sigma
+}

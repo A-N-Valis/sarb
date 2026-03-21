@@ -1,4 +1,7 @@
-use crate::{data::PriceWindow, math::{calculate_beta, calculate_half_life, calculate_spread}};
+use crate::{
+    data::PriceWindow, 
+    math::{calculate_beta, calculate_half_life, calculate_spread}
+};
 
 #[derive(Debug)]
 pub enum PairState {
@@ -8,6 +11,14 @@ pub enum PairState {
     Dead
 }
 
+#[derive(Debug)]
+pub enum TradeSignal {
+    DoNothing,
+    EnterLong,
+    EnterShort,
+    Exit
+}
+
 pub struct TradingPair {
     pub state: PairState,
     pub window_x: PriceWindow,
@@ -15,11 +26,13 @@ pub struct TradingPair {
     pub current_beta: f64,
     pub current_half_life: f64,
     pub max_half_life_threshold: f64,
-    pub has_open_position: bool
+    pub has_open_position: bool,
+    pub entry_z_threshold: f64,
+    pub exit_z_threshold: f64,
 }
 
 impl TradingPair {
-    pub fn new(capacity: usize, max_half_life: f64) -> Self {
+    pub fn new(capacity: usize, max_half_life: f64, entry_z: f64, exit_z: f64) -> Self {
         Self {
             state: PairState::Accumulating,
             window_x: PriceWindow::new(capacity),
@@ -27,7 +40,9 @@ impl TradingPair {
             current_beta: 0.0,
             current_half_life: 0.0,
             max_half_life_threshold: max_half_life,
-            has_open_position: false
+            has_open_position: false,
+            entry_z_threshold: entry_z,
+            exit_z_threshold: exit_z
         }
     }
 
@@ -64,6 +79,36 @@ impl TradingPair {
             }
         } else {
             self.state = PairState::Active
+        }
+    }
+
+    pub fn generate_signal(&mut self, current_z: f64) -> TradeSignal {
+        match self.state {
+            PairState::Unwinding => {
+                if self.has_open_position {
+                    return TradeSignal::Exit
+                }
+
+                TradeSignal::DoNothing
+            }
+
+            PairState::Dead | PairState::Accumulating => TradeSignal::DoNothing,
+            PairState::Active => {
+                if !self.has_open_position {
+                    if current_z > self.entry_z_threshold {
+                        return TradeSignal::EnterShort
+                    }
+
+                    if current_z < -self.entry_z_threshold {
+                        return TradeSignal::EnterLong
+                    }
+                } else {
+                    if current_z.abs() <= self.exit_z_threshold {
+                        return TradeSignal::Exit
+                    }
+                }
+                TradeSignal::DoNothing
+            }
         }
     }
 }
