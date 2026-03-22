@@ -2,9 +2,21 @@ use std::collections::{HashMap, HashSet};
 use crate::pair::TradingPair;
 
 const PAIR_DEFINITIONS: &[(&str, &str, &str)] = &[
-    ("AVAX-NEAR",   "AVAX",   "NEAR"),
-    ("AVAX-FET",    "AVAX",   "FET"),
-    ("NEAR-FET",    "NEAR",   "FET"),
+    ("SOL-AVAX",    "SOL",   "AVAX"),
+    ("SOL-ADA",     "SOL",   "ADA"),
+    ("SOL-SUI",     "SOL",   "SUI"),
+    ("AVAX-ADA",    "AVAX",  "ADA"),
+    ("AVAX-SUI",    "AVAX",  "SUI"),
+    ("ADA-SUI",     "ADA",   "SUI"),
+    ("FET-WLD",     "FET",   "WLD"),
+    ("FET-TAO",     "FET",   "TAO"),
+    ("WLD-TAO",     "WLD",   "TAO"),
+    ("LINK-FIL",    "LINK",  "FIL"),
+    ("LINK-ETHFI",  "LINK",  "ETHFI"),
+    ("LINK-RDNT",   "LINK",  "RDNT"),
+    ("FIL-ETHFI",   "FIL",   "ETHFI"),
+    ("FIL-RDNT",    "FIL",   "RDNT"),
+    ("ETHFI-RDNT",  "ETHFI", "RDNT"),
 ];
 
 pub fn build_universe(capacity: usize) -> HashMap<String, TradingPair> {
