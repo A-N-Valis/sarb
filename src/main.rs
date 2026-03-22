@@ -11,6 +11,8 @@ use tokio::{sync::mpsc, time};
 use crate::{
     exchange::Tick, 
     math::calculate_z_score, 
+    pair::Position, 
+    storage::{init_storage, load_positions}, 
     universe::{build_symbol_list, build_universe}
 };
 
@@ -19,11 +21,38 @@ const CAPACITY: usize = 5;
 
 #[tokio::main]
 async fn main() {
+    init_storage();
+
+    let active_positions = load_positions();
+
     let (tx, mut rx) = mpsc::channel::<Tick>(512);
 
     tokio::spawn(exchange::spawn_market_stream(build_symbol_list(),tx));
 
     let mut uni = build_universe(CAPACITY);
+
+    for (pair_name, pair) in uni.iter_mut() {
+        let (hist_x, hist_y) = storage::load_history(pair_name, CAPACITY);
+
+        let mut vec_x = Vec::with_capacity(CAPACITY);
+        let mut vec_y = Vec::with_capacity(CAPACITY);
+        let mut spread_vec = Vec::with_capacity(CAPACITY);
+        let mut delta_buf = Vec::with_capacity(CAPACITY);
+
+        for (x, y) in hist_x.into_iter().zip(hist_y.into_iter()) {
+            pair.add_prices(x, y, &mut vec_x, &mut vec_y, &mut spread_vec, &mut delta_buf);
+        }
+
+        if let Some(pos) = active_positions.get(pair_name) {
+            pair.active_position = Some( Position {
+                is_short_spread: pos.is_short_spread,
+                entry_price_x: pos.entry_price_x,
+                entry_price_y: pos.entry_price_y,
+                entry_beta: pos.entry_beta,
+            });
+            println!("[engine][{}] position restored from ledger", pair_name);
+        }
+    }
 
     let mut live_prices: HashMap<String, f64> = HashMap::new();
     
@@ -71,6 +100,8 @@ async fn main() {
                         None => continue
                     };
 
+                    storage::save_epoch(pair_key, x, y);
+
                     pair.add_prices(x, y, &mut vec_x, &mut vec_y, &mut spread_vec, &mut delta_buf);
 
                     if spread_vec.is_empty() {
@@ -95,7 +126,7 @@ async fn main() {
                     let has_position = pair.active_position.is_some();
 
                     if had_position != has_position {
-                        storage::save_position(&pair.active_position);
+                        storage::save_positions(&uni);
                     }
                 }
             }

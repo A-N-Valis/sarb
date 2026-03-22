@@ -77,6 +77,13 @@ impl TradingPair {
         self.window_y.fill_slice(vec_y);
 
         self.current_beta = calculate_beta(&vec_x, &vec_y);
+
+        if self.current_beta.abs() < 0.01 {
+            self.state = PairState::Accumulating;
+            spread_vec.clear();
+            return;
+        }
+
         calculate_spread(vec_x, vec_y, self.current_beta, spread_vec);
         self.current_half_life = calculate_half_life(&spread_vec, delta_buf);
 
